@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -10,14 +10,24 @@ import Animated, {
 
 const FPS = 60;
 const DELTA = 1000 / FPS;
-const SPEED = 0.5;
+const SPEED = 10;
+const BALL_WIDTH = 25;
+
+const normalizeVector = (vector) => {
+  const magnitude = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+  return {
+    x: vector.x / magnitude,
+    y: vector.y / magnitude,
+  };
+};
 
 export default function App() {
-  const targetPositionX = useSharedValue(0);
-  const targetPositionY = useSharedValue(0);
-  const directionX = useSharedValue(0);
-  const directionY = useSharedValue(1);
-
+  const targetPositionX = useSharedValue(200);
+  const targetPositionY = useSharedValue(200);
+  const direction = useSharedValue(
+    normalizeVector({ x: Math.random(), y: Math.random() })
+  );
+  const { height, width } = useWindowDimensions();
   useEffect(() => {
     const interval = setInterval(update, DELTA);
 
@@ -25,20 +35,35 @@ export default function App() {
   }, []);
 
   const update = () => {
-    targetPositionX.value = withTiming(
-      targetPositionX.value + directionX.value * SPEED,
-      {
-        duration: DELTA,
-        easing: Easing.linear,
-      }
-    );
-    targetPositionY.value = withTiming(
-      targetPositionY.value + directionY.value * SPEED,
-      {
-        duration: DELTA,
-        easing: Easing.linear,
-      }
-    );
+    let nextPos = getNextPos(direction.value);
+
+    if (nextPos.x < 0 || nextPos.x > width - BALL_WIDTH) {
+      const newDirection = { x: -direction.value.x, y: direction.value.y };
+      direction.value = newDirection;
+      nextPos = getNextPos(newDirection);
+    }
+
+    if (nextPos.y < 0 || nextPos.y > height - BALL_WIDTH) {
+      const newDirection = { x: direction.value.x, y: -direction.value.y };
+      direction.value = newDirection;
+      nextPos = getNextPos(newDirection);
+    }
+
+    targetPositionX.value = withTiming(nextPos.x, {
+      duration: DELTA,
+      easing: Easing.linear,
+    });
+    targetPositionY.value = withTiming(nextPos.y, {
+      duration: DELTA,
+      easing: Easing.linear,
+    });
+  };
+
+  const getNextPos = (direction) => {
+    return {
+      x: targetPositionX.value + direction.x * SPEED,
+      y: targetPositionY.value + direction.y * SPEED,
+    };
   };
 
   const ballAnimatedStyles = useAnimatedStyle(() => {
@@ -51,8 +76,6 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.ball, ballAnimatedStyles]} />
-
-      <StatusBar style="auto" />
     </View>
   );
 }
@@ -66,7 +89,7 @@ const styles = StyleSheet.create({
   },
   ball: {
     backgroundColor: "black",
-    width: 25,
+    width: BALL_WIDTH,
     aspectRatio: 1,
     borderRadius: 25,
     position: "absolute",
