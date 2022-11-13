@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -8,11 +8,15 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+// Constants
 const FPS = 60;
 const DELTA = 1000 / FPS;
 const SPEED = 10;
-const BALL_WIDTH = 25;
+const BALL_WIDTH = 15;
 
+const islandDimensions = { x: 150, y: 11, w: 127, h: 37 }; // ideal island dimensions
+
+// vector normalization
 const normalizeVector = (vector) => {
   const magnitude = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
   return {
@@ -22,18 +26,18 @@ const normalizeVector = (vector) => {
 };
 
 export default function App() {
-  const targetPositionX = useSharedValue(200);
-  const targetPositionY = useSharedValue(200);
+  const { height, width } = useWindowDimensions();
+  const targetPositionX = useSharedValue(width / 2);
+  const targetPositionY = useSharedValue(height / 2);
   const direction = useSharedValue(
     normalizeVector({ x: Math.random(), y: Math.random() })
   );
-  const { height, width } = useWindowDimensions();
   useEffect(() => {
     const interval = setInterval(update, DELTA);
-
     return () => clearInterval(interval);
   }, []);
 
+  // update ball position
   const update = () => {
     let nextPos = getNextPos(direction.value);
 
@@ -49,6 +53,28 @@ export default function App() {
       nextPos = getNextPos(newDirection);
     }
 
+    // handle ball collision with island
+    if (
+      nextPos.x < islandDimensions.x + islandDimensions.w &&
+      nextPos.x + BALL_WIDTH > islandDimensions.x &&
+      nextPos.y < islandDimensions.y + islandDimensions.h &&
+      BALL_WIDTH + nextPos.y > islandDimensions.y
+    ) {
+      if (
+        targetPositionX.value < islandDimensions.x ||
+        targetPositionX.value > islandDimensions.x + islandDimensions.w
+      ) {
+        const newDirection = { x: -direction.value.x, y: direction.value.y };
+        direction.value = newDirection;
+        nextPos = getNextPos(newDirection);
+      } else {
+        const newDirection = { x: direction.value.x, y: -direction.value.y };
+        direction.value = newDirection;
+        nextPos = getNextPos(newDirection);
+      }
+    }
+
+    // use withTiming for continous movement of ball
     targetPositionX.value = withTiming(nextPos.x, {
       duration: DELTA,
       easing: Easing.linear,
@@ -76,6 +102,20 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.ball, ballAnimatedStyles]} />
+
+      <View
+        style={{
+          top: islandDimensions.y,
+          left: islandDimensions.x,
+          width: islandDimensions.w,
+          height: islandDimensions.h,
+          position: "absolute",
+          backgroundColor: "black",
+          borderRadius: 20,
+        }}
+      />
+
+      <StatusBar style="light" />
     </View>
   );
 }
