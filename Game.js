@@ -1,25 +1,28 @@
-import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { useEffect, useState } from "react";
 import {
-  GestureHandlerRootView,
-  PanGestureHandler,
-} from "react-native-gesture-handler";
+  Button,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { PanGestureHandler } from "react-native-gesture-handler";
 import Animated, {
+  BounceIn,
   Easing,
   useAnimatedGestureHandler,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 
 // Constants
 const FPS = 60;
 const DELTA = 1000 / FPS;
-const SPEED = 10;
+const SPEED = 20;
 const BALL_WIDTH = 15;
-
-const islandDimensions = { x: 212, y: 7, w: 25, h: 25 }; // island dimensions
 
 // vector normalization
 const normalizeVector = (vector) => {
@@ -35,8 +38,12 @@ export default function Game() {
 
   const playerDimensions = {
     w: width / 2,
-    h: 37,
+    h: 25,
   }; // player dimensions
+  const islandDimensions = { x: 150, y: 11, w: width / 4, h: 25 }; // island dimensions
+
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
 
   const targetPositionX = useSharedValue(width / 2);
   const targetPositionY = useSharedValue(height / 2);
@@ -46,9 +53,13 @@ export default function Game() {
   const playerPosition = useSharedValue({ x: width / 4, y: height - 100 });
 
   useEffect(() => {
-    const interval = setInterval(update, DELTA);
+    const interval = setInterval(() => {
+      if (!gameOver) {
+        update();
+      }
+    }, DELTA);
     return () => clearInterval(interval);
-  }, []);
+  }, [gameOver]);
 
   // update ball position
   const update = () => {
@@ -56,11 +67,15 @@ export default function Game() {
     let newDirection = direction.value;
 
     // wall hit detection
+    if (nextPos.y > height - BALL_WIDTH) {
+      setGameOver(true);
+    }
+
     if (nextPos.x < 0 || nextPos.x > width - BALL_WIDTH) {
       newDirection = { x: -direction.value.x, y: direction.value.y };
     }
 
-    if (nextPos.y < 0 || nextPos.y > height - BALL_WIDTH) {
+    if (nextPos.y < 0) {
       newDirection = { x: direction.value.x, y: -direction.value.y };
     }
 
@@ -79,6 +94,7 @@ export default function Game() {
       } else {
         newDirection = { x: direction.value.x, y: -direction.value.y };
       }
+      setScore((s) => s + 1);
     }
 
     // player hit detection
@@ -119,6 +135,13 @@ export default function Game() {
     };
   };
 
+  const restartGame = () => {
+    targetPositionX.value = width / 2;
+    targetPositionY.value = height / 2;
+    setScore(0);
+    setGameOver(false);
+  };
+
   const ballAnimatedStyles = useAnimatedStyle(() => {
     return {
       top: targetPositionY.value,
@@ -130,10 +153,34 @@ export default function Game() {
     return { left: playerPosition.value.x };
   });
 
+  const islandAnimatedStyles = useAnimatedStyle(() => {
+    return {
+      width: withRepeat(
+        withSequence(
+          withTiming(islandDimensions.w * 1.3, { duration: 100 }),
+          withTiming(islandDimensions.w, { duration: 100 })
+        ),
+        3
+      ),
+      height: withRepeat(
+        withSequence(
+          withTiming(islandDimensions.h * 1.3, { duration: 100 }),
+          withTiming(islandDimensions.h, { duration: 100 })
+        ),
+        3
+      ),
+      opacity: withRepeat(
+        withSequence(
+          withTiming(0, { duration: 100 }),
+          withTiming(1, { duration: 100 })
+        ),
+        3
+      ),
+    };
+  }, [score]);
+
   const gestureHandler = useAnimatedGestureHandler({
-    onStart: (event) => {
-      console.log(event);
-    },
+    onStart: () => {},
     onActive: (event) => {
       playerPosition.value = {
         ...playerPosition.value,
@@ -145,18 +192,29 @@ export default function Game() {
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.ball, ballAnimatedStyles]} />
+      <Text style={styles.score}>{score}</Text>
+      {gameOver && (
+        <View style={styles.gameOverContainer}>
+          <Text style={styles.gameOver}>Game Over</Text>
+
+          <Button title="Restart" onPress={restartGame} />
+        </View>
+      )}
+
+      {!gameOver && <Animated.View style={[styles.ball, ballAnimatedStyles]} />}
 
       {/* Island */}
-      <View
+      <Animated.View
+        entering={BounceIn}
+        key={score}
         style={{
+          position: "absolute",
           top: islandDimensions.y,
           left: islandDimensions.x,
           width: islandDimensions.w,
           height: islandDimensions.h,
-          position: "absolute",
-          backgroundColor: "black",
           borderRadius: 20,
+          backgroundColor: "black",
         }}
       />
 
@@ -203,5 +261,21 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 25,
     position: "absolute",
+  },
+  score: {
+    fontSize: 150,
+    fontWeight: "500",
+    position: "absolute",
+    top: 150,
+    color: "lightgrey",
+  },
+  gameOverContainer: {
+    position: "absolute",
+    top: 300,
+  },
+  gameOver: {
+    fontSize: 50,
+    fontWeight: "500",
+    color: "red",
   },
 });
